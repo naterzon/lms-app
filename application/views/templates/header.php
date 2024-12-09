@@ -58,5 +58,7 @@ if (!is_null($fonts)) {
         ga('send', 'pageview');
     </script>
 <?php } ?>
+<script type="text/javascript" src="<?php echo base_url();?>assets/js/custom-fix.js"></script>
+
 </head>
 <body>

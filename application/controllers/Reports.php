@@ -105,7 +105,15 @@ class Reports extends CI_Controller {
             $result[$user->id]['identifier'] = $user->identifier;
             $result[$user->id]['firstname'] = $user->firstname;
             $result[$user->id]['lastname'] = $user->lastname;
-            $date = new DateTime($user->datehired);
+
+            if (!empty($user->datehired)) {
+                $date = new DateTime($user->datehired);
+                $result[$user->id]['datehired'] = $date->format(lang('global_date_format'));
+            } else {
+                $result[$user->id]['datehired'] = lang('global_not_available'); // O cualquier valor predeterminado
+            }   
+            
+            
             $result[$user->id]['datehired'] = $date->format(lang('global_date_format'));
             $result[$user->id]['department'] = $user->department;
             $result[$user->id]['position'] = $user->position;

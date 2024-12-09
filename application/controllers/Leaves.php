@@ -198,75 +198,138 @@ class Leaves extends CI_Controller {
       redirect("/$source/$id");
     }
 
-    /**
-     * Create a leave request
-     * @author Benjamin BALET <benjamin.balet@gmail.com>
-     */
-    public function create() {
-        $this->auth->checkIfOperationIsAllowed('create_leaves');
-        $data = getUserContext($this);
-        $this->load->helper('form');
-        $this->load->library('form_validation');
-        $data['title'] = lang('leaves_create_title');
-        $data['help'] = $this->help->create_help_link('global_link_doc_page_request_leave');
 
-        $this->form_validation->set_rules('startdate', lang('leaves_create_field_start'), 'required|strip_tags');
-        $this->form_validation->set_rules('startdatetype', 'Start Date type', 'required|strip_tags');
-        $this->form_validation->set_rules('enddate', lang('leaves_create_field_end'), 'required|strip_tags');
-        $this->form_validation->set_rules('enddatetype', 'End Date type', 'required|strip_tags');
-        $this->form_validation->set_rules('duration', lang('leaves_create_field_duration'), 'required|strip_tags');
-        $this->form_validation->set_rules('type', lang('leaves_create_field_type'), 'required|strip_tags');
-        $this->form_validation->set_rules('cause', lang('leaves_create_field_cause'), 'strip_tags');
-        $this->form_validation->set_rules('status', lang('leaves_create_field_status'), 'required|strip_tags');
 
-        if ($this->form_validation->run() === FALSE) {
-            $this->load->model('contracts_model');
-            $leaveTypesDetails = $this->contracts_model->getLeaveTypesDetailsOTypesForUser($this->session->userdata('id'));
-            $data['defaultType'] = $leaveTypesDetails->defaultType;
-            $data['credit'] = $leaveTypesDetails->credit;
-            $data['types'] = $leaveTypesDetails->types;
-            $this->load->view('templates/header', $data);
-            $this->load->view('menu/index', $data);
-            $this->load->view('leaves/create');
-            $this->load->view('templates/footer');
+    
+
+/**
+ * Create a leave request
+ * @author Benjamin BALET
+ */
+public function create() {
+    $this->auth->checkIfOperationIsAllowed('create_leaves');
+    $data = getUserContext($this);
+    $this->load->helper('form');
+    $this->load->library('form_validation');
+    $data['title'] = lang('leaves_create_title');
+    $data['help'] = $this->help->create_help_link('global_link_doc_page_request_leave');
+
+    $this->form_validation->set_rules('startdate', lang('leaves_create_field_start'), 'required|strip_tags');
+    $this->form_validation->set_rules('startdatetype', 'Start Date type', 'required|strip_tags');
+    $this->form_validation->set_rules('enddate', lang('leaves_create_field_end'), 'required|strip_tags');
+    $this->form_validation->set_rules('enddatetype', 'End Date type', 'required|strip_tags');
+    $this->form_validation->set_rules('duration', lang('leaves_create_field_duration'), 'required|strip_tags');
+    $this->form_validation->set_rules('type', lang('leaves_create_field_type'), 'required|strip_tags');
+    $this->form_validation->set_rules('cause', lang('leaves_create_field_cause'), 'strip_tags');
+    $this->form_validation->set_rules('status', lang('leaves_create_field_status'), 'required|strip_tags');
+
+    if ($this->form_validation->run() === FALSE) {
+        $this->load->model('contracts_model');
+        $leaveTypesDetails = $this->contracts_model->getLeaveTypesDetailsOTypesForUser($this->session->userdata('id'));
+        $data['defaultType'] = $leaveTypesDetails->defaultType;
+        $data['credit'] = $leaveTypesDetails->credit;
+        $data['types'] = $leaveTypesDetails->types;
+        $this->load->view('templates/header', $data);
+        $this->load->view('menu/index', $data);
+        $this->load->view('leaves/create');
+        $this->load->view('templates/footer');
+    } else {
+        log_message('debug', 'Datos recibidos: ' . json_encode($this->input->post()));
+        log_message('debug', 'Usuario: ' . $this->session->userdata('id'));
+
+        // Recuperar posición del usuario
+        //$position_id = $this->session->userdata('position');
+        $this->db->select('position');
+        $this->db->from('users');
+        $this->db->where('id', $this->session->userdata('id')); // Aquí usas el ID del usuario almacenado en la sesión
+        $query = $this->db->get();
+        $position_id = $query->row()->position;
+
+        log_message('debug', 'Posición del usuario: ' . $position_id);
+
+        //$user_id = $this->session->userdata('id');
+        
+
+        //
+
+        $start_date = $this->input->post('startdate');
+        $end_date = $this->input->post('enddate');
+        log_message('debug', 'Fechas: inicio=' . $start_date . ', fin=' . $end_date);
+
+        // Obtener máximo de vacaciones para la posición
+        $this->db->select('max_vacations');
+        $this->db->from('positions');
+        $this->db->where('id', $position_id);
+        $query = $this->db->get();
+
+        if ($query->num_rows() > 0 && isset($query->row()->max_vacations)) {
+            $max_vacations = $query->row()->max_vacations;
         } else {
-          //Prevent thugs to auto validate their leave requests
-          if (!$this->is_hr && !$this->is_admin) {
-            if ($this->input->post('status') > LMS_REQUESTED) {
-                log_message('error', 'User #' . $this->session->userdata('id') . 
-                    ' tried to submit a LR with an wrong status = ' . $this->input->post('status'));
-                $_POST['status'] = LMS_REQUESTED;
-            }
-          }
-          
-            //Users must use an existing leave type, otherwise
-            //force leave type to default leave type
+            $max_vacations = 2; // Valor por defecto
+        }
+
+        log_message('debug', 'Máximo de vacaciones permitidas para la posición ' . $position_id . ': ' . $max_vacations);
+
+        // Contar vacaciones actuales en el rango
+        log_message('debug', 'Contando vacaciones existentes para posición: ' . $position_id . ' en el rango ' . $start_date . ' - ' . $end_date);
+        $current_vacations = $this->leaves_model->countPositionVacations($position_id, $start_date, $end_date);
+        log_message('debug', 'Número de vacaciones actuales en el rango: ' . $current_vacations);
+
+       
+
+        // Validación de tipo y status
+            if (!$this->is_hr && !$this->is_admin) {
+                if ($this->input->post('status') > LMS_REQUESTED) {
+                    log_message('error', 'User #' . $this->session->userdata('id') . ' tried to submit a LR with an wrong status = ' . $this->input->post('status'));
+                    $_POST['status'] = LMS_REQUESTED;
+                }
+            }    
+
             $this->load->model('contracts_model');
             $leaveTypesDetails = $this->contracts_model->getLeaveTypesDetailsOTypesForUser($this->session->userdata('id'));
             if (!array_key_exists($this->input->post('type'), $leaveTypesDetails->types)) {
-                log_message('error', 'User #' . $this->session->userdata('id') . ' tried to submit an wrong LR type = ' . 
-                $this->input->post('type'));
+                log_message('error', 'User #' . $this->session->userdata('id') . ' tried to submit an wrong LR type = ' . $this->input->post('type'));
                 $_POST['type'] = $leaveTypesDetails->defaultType;
-                log_message('debug', 'LR type forced to ' . $leaveTypesDetails->defaultType); 
+                log_message('debug', 'LR type forced to ' . $leaveTypesDetails->defaultType);
             }
 
-          if (function_exists('triggerCreateLeaveRequest')) {
-              triggerCreateLeaveRequest($this);
-          }
-          $leave_id = $this->leaves_model->setLeaves($this->session->userdata('id'));
-          $this->session->set_flashdata('msg', lang('leaves_create_flash_msg_success'));
+            if (function_exists('triggerCreateLeaveRequest')) {
+                triggerCreateLeaveRequest($this);
+            }
 
-          //If the status is requested, send an email to the manager
-          if ($this->input->post('status') == LMS_REQUESTED) {
-              $this->sendMailOnLeaveRequestCreation($leave_id);
-          }
-          if (isset($_GET['source'])) {
-              redirect($_GET['source']);
-          } else {
-              redirect('leaves');
-          }
+            
+
+            if ($current_vacations >= $max_vacations) {
+                log_message('debug', 'Límite de vacaciones excedido. Solicitadas: ' . $current_vacations . ', Máximo permitido: ' . $max_vacations);
+                $this->session->set_flashdata('msg', 'Actualmente ya se encuentran compañeros de vacación en estas fechas, su solicitud será enviada a su supervisor para revisión.');
+            } else {
+                log_message('debug', 'Vacaciones permitidas. Flujo normal de solicitud.');
+                $this->session->set_flashdata('msg', lang('leaves_create_flash_msg_success'));
+            } 
+            
+            $leave_id = $this->leaves_model->setLeaves($this->session->userdata('id'));
+
+            // Enviar correo si el estado es "Requested"
+            if ($this->input->post('status') == LMS_REQUESTED) {
+                $this->sendMailOnLeaveRequestCreation($leave_id);
+            }    
+        
+
+        // Redirección según la fuente
+        if (isset($_GET['source'])) {
+            redirect($_GET['source']);
+        } else {
+            redirect('leaves');
         }
     }
+}
+
+
+
+
+
+
+
 
     /**
      * Edit a leave request

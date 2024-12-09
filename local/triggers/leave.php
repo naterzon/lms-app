@@ -8,5 +8,5 @@
  */
 function triggerCreateLeaveRequest(CI_Controller $controller)
 {
-    //log_message('error', 'Test accessing posted value : ' . $controller->input->post('startdate'));
+    log_message('error', 'Test accessing posted value : ' . $controller->input->post('startdate'));
 }

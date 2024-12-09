@@ -20,6 +20,40 @@ class Leaves_model extends CI_Model {
     public function __construct() {
 
     }
+     // Construcción de la consulta para contar vacaciones aprobadas en el mismo puesto
+     
+    public function countPositionVacations($position_id, $start_date, $end_date) {
+        $this->db->select('COUNT(*) as total');
+        $this->db->from('leaves l');
+        $this->db->join('users u', 'u.id = l.employee');
+        $this->db->where('u.position', $position_id);
+        $this->db->where('l.status', 3); // Estado "Accepted"
+        $this->db->group_start();
+        $this->db->where('l.startdate <=', $end_date);
+        $this->db->where('l.enddate >=', $start_date);
+        $this->db->group_end();
+        $query = $this->db->get();
+
+          // Registrar en el log el número de vacaciones encontradas
+         log_message('debug', 'Número de vacaciones para posición ' . $position_id . ': ' . ($query->row() ? $query->row()->total : 0));
+    
+        return $query->row()->total; // Retorna el total de vacaciones aprobadas
+    }
+
+    /**
+     * Función para corregir la toma de la posición de la
+     * 
+     */
+    
+    public function setLeaveRequest($data) {
+        $this->db->insert('leaves', $data);
+        if ($this->db->affected_rows() > 0) {
+            return $this->db->insert_id(); // Devuelve el ID de la fila insertada
+        } else {
+            return false; // Inserción fallida
+        }
+    }
+    
 
     /**
      * Get the list of all leave requests or one leave
@@ -669,41 +703,49 @@ class Leaves_model extends CI_Model {
      * @param int $comment New comment
      * @author Emilien NICOLAS <milihhard1996@gmail.com>
      */
-    public function switchStatusAndComment($id, $status, $comment) {
-        $json_parsed = $this->getCommentsLeave($id);
-        $commentObject = new stdClass;
-        $commentObject->type = "comment";
-        $commentObject->author = $this->session->userdata('id');
-        $commentObject->value = $comment;
-        $commentObject->date = date("Y-n-j");
-        if (isset($json_parsed)){
-          array_push($json_parsed->comments, $commentObject);
-        }else {
-          $json_parsed->comments = array($commentObject);
-        }
-        $comment_change = new stdClass;
-        $comment_change->type = "change";
-        $comment_change->status_number = $status;
-        $comment_change->date = date("Y-n-j");
-        if (isset($json_parsed)){
-          array_push($json_parsed->comments, $comment_change);
-        }else {
-          $json_parsed->comments = array($comment_change);
-        }
-        $json = json_encode($json_parsed);
-        $data = array(
-            'status' => $status,
-            'comments' => $json
-        );
-        $this->db->where('id', $id);
-        $this->db->update('leaves', $data);
-
-        //Trace the modification if the feature is enabled
-        if ($this->config->item('enable_history') === TRUE) {
-            $this->load->model('history_model');
-            $this->history_model->setHistory(2, 'leaves', $id, $this->session->userdata('id'));
-        }
+   public function switchStatusAndComment($id, $status, $comment) {
+    // Obtener los comentarios existentes de la solicitud
+    $json_parsed = $this->getCommentsLeave($id);
+    
+    // Si no hay comentarios previos, inicializar como un objeto vacío con un array de comentarios
+    if ($json_parsed === null) {
+        $json_parsed = new stdClass();
+        $json_parsed->comments = array();
     }
+
+    // Crear un nuevo comentario
+    $commentObject = new stdClass();
+    $commentObject->type = "comment";
+    $commentObject->author = $this->session->userdata('id');
+    $commentObject->value = $comment;
+    $commentObject->date = date("Y-n-j");
+    array_push($json_parsed->comments, $commentObject);
+
+    // Crear un registro de cambio de estado
+    $comment_change = new stdClass();
+    $comment_change->type = "change";
+    $comment_change->status_number = $status;
+    $comment_change->date = date("Y-n-j");
+    array_push($json_parsed->comments, $comment_change);
+
+    // Convertir a JSON
+    $json = json_encode($json_parsed);
+
+    // Actualizar la base de datos con el nuevo estado y comentarios
+    $data = array(
+        'status' => $status,
+        'comments' => $json
+    );
+    $this->db->where('id', $id);
+    $this->db->update('leaves', $data);
+
+    // Rastrear la modificación si la funcionalidad está habilitada
+    if ($this->config->item('enable_history') === TRUE) {
+        $this->load->model('history_model');
+        $this->history_model->setHistory(2, 'leaves', $id, $this->session->userdata('id'));
+    }
+}
+
 
     /**
      * Delete leaves attached to a user
