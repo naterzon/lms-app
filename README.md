@@ -3,7 +3,7 @@
 Jorani is a Leave Management System developed in PHP/MySQL under an AGPL v3 licence.
 Jorani is designed to provide simple leave and overtime request workflows for small organizations.
 
-## Informations / getting help
+## Informations / getting help from chatGPT
 
 * Official website : https://jorani.org/
 * User group : https://groups.google.com/forum/?hl=en#!forum/jorani
